@@ -229,3 +229,38 @@ A model is ready only when all applicable checks pass:
 - Bambu Studio import is expected to preserve alignment
 
 If any gate fails, do not approve the model.
+## Parametric CAD toolchain
+Preferred stack for deterministic geometry:
+- CadQuery (OpenCascade B-rep) for the model, driven by named parameters
+- trimesh + manifold3d for mesh validation and boolean tests
+- STL for printing, STEP alongside it so the part stays editable
+
+Reference implementation: `models/threaded-tube/`.
+
+### Threads
+For an FDM screw fit on a 0.4 mm nozzle, start from:
+- Trapezoidal profile, single start, right hand
+- Pitch 2.0 to 3.0 mm; coarse threads print and clear better than fine ones
+- Radial depth about 1.0 mm
+- Radial clearance 0.2 mm per flank, axial clearance 0.1 mm
+- Taper the first and last turn instead of ending the helix abruptly
+- Add a conical mouth on the female part to prevent cross-threading
+
+Validate a thread by virtual assembly, not by eye: place the parts at the
+seated position, rotate one through a full turn, and measure the solid
+intersection at each phase. A thread that meshes shows near-zero
+interference at exactly one phase and collision at the rest. Interference
+at every phase means it does not fit.
+
+### OpenCascade failure modes
+These two return plausible geometry instead of raising, so check the volume
+after every boolean:
+1. A helical sweep fused to its core along a tangential seam returns the
+   core unchanged. Use a fuzzy tolerance (`tol=1e-4`) and sink the thread
+   root about 0.15 mm into the core.
+2. `revolve()` reads its axis in workplane-local coordinates. On the XZ
+   plane the global Z axis is `(0, 1, 0)`; `(0, 0, 1)` silently produces a
+   zero-volume solid.
+
+Never place two faces exactly coincident when a boolean has to cut through
+them. Offset by 0.1 mm and let the operation resolve.
